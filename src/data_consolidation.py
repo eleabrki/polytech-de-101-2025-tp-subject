@@ -22,9 +22,9 @@ def consolidate_city_data():
     with open(f"data/raw_data/{today_date}/communes_data.json") as fd:
         data = json.load(fd)
 
-    raw_data_df = pd.json_normalize(data)
+    raw_data_communes_df = pd.json_normalize(data)
 
-    city_data_df = raw_data_df[[
+    city_data_df = raw_data_communes_df[[
         "code",
         "nom",
         "population"
@@ -45,18 +45,19 @@ def consolidate_city_data():
 def consolidate_station_data():
 
     con = duckdb.connect(database = "data/duckdb/mobility_analysis.duckdb", read_only = False)
-    data = {}
+    data_paris = {}
+    data_nantes = {}
 
     # === PARIS === 
     with open(f"data/raw_data/{today_date}/paris_realtime_bicycle_data.json") as fd:
-        data = json.load(fd)
+        data_paris = json.load(fd)
 
-    raw_data_df = pd.json_normalize(data)
-    raw_data_df['id'] = raw_data_df['stationcode'] + '_' + raw_data_df['code_insee_commune']
-    raw_data_df["address"] = None
-    raw_data_df["created_date"] = None
+    raw_data_paris_df = pd.json_normalize(data_paris)
+    raw_data_paris_df['id'] = raw_data_paris_df['stationcode'] + '_' + raw_data_paris_df['code_insee_commune']
+    raw_data_paris_df["address"] = None
+    raw_data_paris_df["created_date"] = None
 
-    station_data_df = raw_data_df[[
+    station_data_df = raw_data_paris_df[[
         "id",
         "stationcode",
         "name",
@@ -87,16 +88,15 @@ def consolidate_station_data():
 
     # === NANTES ===
     with open(f"data/raw_data/{today_date}/nantes_realtime_bicycle_data.json") as fd:
-        data = json.load(fd)
+        data_nantes = json.load(fd)
 
-    raw_data_df = pd.json_normalize(data)
-    raw_data_df["code_insee_commune"] = "44109"
-    raw_data_df['id'] = raw_data_df['number'].astype(str) + '_' + raw_data_df['code_insee_commune']
-    raw_data_df["address"] = None
-    raw_data_df["created_date"] = None
-    raw_data_df["status_bool"] = raw_data_df["status"].map({True: "OPEN", False: "CLOSED"})
+    raw_data_nantes_df = pd.json_normalize(data_nantes)
+    raw_data_nantes_df["code_insee_commune"] = "44109"
+    raw_data_nantes_df['id'] = raw_data_nantes_df['number'].astype(str) + '_' + raw_data_nantes_df['code_insee_commune']
+    raw_data_nantes_df["created_date"] = None
+    raw_data_nantes_df["status_bool"] = raw_data_nantes_df["status"].map({"OPEN": "OUI", "CLOSED": "NON"})
 
-    station_data_df = raw_data_df[[
+    station_data_df = raw_data_nantes_df[[
         "id",
         "number",
         "name",
@@ -129,17 +129,18 @@ def consolidate_station_data():
 def consolidate_station_statement_data():
 
     con = duckdb.connect(database = "data/duckdb/mobility_analysis.duckdb", read_only = False)
-    data = {}
+    data_paris = {}
+    data_nantes = {}
 
     # === PARIS ===
     with open(f"data/raw_data/{today_date}/paris_realtime_bicycle_data.json") as fd:
-        data = json.load(fd)
+        data_paris = json.load(fd)
 
-    raw_data_df = pd.json_normalize(data)
-    raw_data_df['station_id'] = raw_data_df['stationcode'] + '_' + raw_data_df['code_insee_commune']
-    raw_data_df["address"] = None
+    raw_data_paris_df = pd.json_normalize(data_paris)
+    raw_data_paris_df['station_id'] = raw_data_paris_df['stationcode'] + '_' + raw_data_paris_df['code_insee_commune']
+    raw_data_paris_df["address"] = None
 
-    station_statement_data_df = raw_data_df[[
+    station_statement_data_df = raw_data_paris_df[[
         "station_id",
         "numdocksavailable",
         "numbikesavailable",
@@ -160,13 +161,13 @@ def consolidate_station_statement_data():
 
     # === NANTES ===
     with open(f"data/raw_data/{today_date}/nantes_realtime_bicycle_data.json") as fd:
-        data = json.load(fd)
+        data_nantes = json.load(fd)
 
-    raw_data_df = pd.json_normalize(data)
-    raw_data_df["code_insee_commune"] = "44109"
-    raw_data_df['station_id'] = raw_data_df['number'].astype(str) + '_' + raw_data_df['code_insee_commune']
+    raw_data_nantes_df = pd.json_normalize(data_nantes)
+    raw_data_nantes_df["code_insee_commune"] = "44109"
+    raw_data_nantes_df['station_id'] = raw_data_nantes_df['number'].astype(str) + '_' + raw_data_nantes_df['code_insee_commune']
 
-    station_statement_data_df = raw_data_df[[
+    station_statement_data_df = raw_data_nantes_df[[
         "station_id",
         "available_bike_stands",
         "available_bikes",

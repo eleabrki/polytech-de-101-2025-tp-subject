@@ -49,18 +49,21 @@ def agregate_fact_station_statement():
     con = duckdb.connect(database = "data/duckdb/mobility_analysis.duckdb", read_only = False)
     
     sql_statement = """
-    INSERT OR REPLACE INTO FACT_STATION_STATEMENT
-    SELECT 
-        STATION_ID,
-        c.id AS CITY_ID,
-        BICYCLE_DOCKS_AVAILABLE,
-        BICYCLE_AVAILABLE,
-        LAST_STATEMENT_DATE,
-        sst.CREATED_DATE
-    FROM CONSOLIDATE_STATION_STATEMENT sst
-    JOIN CONSOLIDATE_STATION s ON sst.station_id = s.id
-    JOIN CONSOLIDATE_CITY c ON s.city_name = c.name
-    WHERE sst.CREATED_DATE = (SELECT MAX(CREATED_DATE) FROM CONSOLIDATE_STATION_STATEMENT);
+        INSERT OR REPLACE INTO FACT_STATION_STATEMENT
+        SELECT 
+            sst.STATION_ID,
+            c.ID AS CITY_ID,
+            sst.BICYCLE_DOCKS_AVAILABLE,
+            sst.BICYCLE_AVAILABLE,
+            sst.LAST_STATEMENT_DATE,
+            sst.CREATED_DATE
+        FROM CONSOLIDATE_STATION_STATEMENT sst
+        JOIN CONSOLIDATE_STATION s ON sst.STATION_ID = s.ID
+        JOIN CONSOLIDATE_CITY c ON s.CITY_CODE = c.ID
+        WHERE sst.CREATED_DATE = (
+            SELECT MAX(CREATED_DATE) 
+            FROM CONSOLIDATE_STATION_STATEMENT
+        );
     """
 
     con.execute(sql_statement)
