@@ -38,7 +38,7 @@ def agregate_dim_station():
         LONGITUDE,
         LATITUDE,
         STATUS,
-        CAPACITTY
+        CAPACITY
     FROM CONSOLIDATE_STATION
     WHERE CREATED_DATE = (SELECT MAX(CREATED_DATE) FROM CONSOLIDATE_STATION);
     """

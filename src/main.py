@@ -19,7 +19,6 @@ from data_ingestion import (
 def main():
     print("Process start.")
     # data ingestion
-
     print("Data ingestion started.")
     get_paris_realtime_bicycle_data()
     get_nantes_realtime_bicycle_data()

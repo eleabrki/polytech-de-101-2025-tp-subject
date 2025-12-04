@@ -29,6 +29,7 @@ def consolidate_city_data():
         "nom",
         "population"
     ]]
+
     city_data_df.rename(columns={
         "code": "id",
         "nom": "name",
@@ -75,8 +76,7 @@ def consolidate_station_data():
         "code_insee_commune": "city_code",
         "coordonnees_geo.lon": "longitude",
         "coordonnees_geo.lat": "latitude",
-        "is_installed": "status",
-        "capacity": "capacitty"
+        "is_installed": "status"
     }, inplace=True)
     station_data_df.drop_duplicates(inplace = True)
 
@@ -117,7 +117,7 @@ def consolidate_station_data():
         "position.lon": "longitude",
         "position.lat": "latitude",
         "status_bool": "status",
-        "bike_stands": "capacitty"
+        "bike_stands": "capacity"
     }, inplace=True)
     station_data_df.drop_duplicates(inplace = True)
 
