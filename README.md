@@ -390,8 +390,6 @@ def agregate_fact_station_statement():
     con.execute(sql_statement)
 ```
 
-**EXPLICATION**
-
 ### Le fichier main.py
 
 Le fichier `main.py` contient le code principal du processus et exécute séquentiellement les différentes fonctions expliquées plus haut.
