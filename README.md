@@ -34,6 +34,24 @@ def serialize_data(raw_json: str, file_name: str):
 
 Ces fonctions python sont assez simples. Elles récupèrent les données sur une API open-source, et les stockent dans un fichier json localement. Ces fonctions sont dans le fichier python `data_ingestion.py`.
 
+J'ai ajouté la ville de Nantes :
+
+```python
+def get_nantes_realtime_bicycle_data():
+    url = "https://data.nantesmetropole.fr/api/explore/v2.1/catalog/datasets/244400404_stations-velos-libre-service-nantes-metropole-disponibilites/exports/json"
+    response = requests.request("GET", url)
+    serialize_data(response.text, "nantes_realtime_bicycle_data.json")
+```
+
+J'ai aussi remplacé la source de données des tables CONSOLIDATE_CITY et DIM_CITY par les données provenant d'une API :
+
+```python
+def get_communes_data():
+    url = "https://geo.api.gouv.fr/communes"
+    response = requests.request("GET", url)
+    serialize_data(response.text, "communes_data.json")
+```
+
 ### Consolidation des données
 
 **Duckdb** est une base de données de type data-warehouse que l'on peut utiliser localement, car elle charge les données en "in-memory" ou dans un fichier local. C'est l'équivalent de SQLite, mais pour des bases de données de type data-warehouse. Créer une connexion duckdb permet de "créer" une database et d'interagir avec comme avec un vrai data-warehouse. C'est parfait pour des projets de ce type. Plus d'informations sur le site officiel de duckdb : https://duckdb.org/. N'oubliez pas d'installer le CLI DuckDB via cette documentation : https://duckdb.org/install/?platform=macos&environment=cli. Le CLI vous sera utile plus tard.
@@ -102,6 +120,186 @@ Explication de cette fonction :
 
 Les autres fonctions de consolidation pour les autres tables devraient être similaires.
 
+J'ai modifié la fonction consolidate_city_data pour ajouter les données provenant de l'API "communes", pour avoir accès au nombre d'habitants :
+
+```python
+def consolidate_city_data():
+
+    con = duckdb.connect(database = "data/duckdb/mobility_analysis.duckdb", read_only = False)
+    data = {}
+
+    with open(f"data/raw_data/{today_date}/communes_data.json") as fd:
+        data = json.load(fd)
+
+    raw_data_communes_df = pd.json_normalize(data)
+
+    city_data_df = raw_data_communes_df[[
+        "code",
+        "nom",
+        "population"
+    ]]
+
+    city_data_df.rename(columns={
+        "code": "id",
+        "nom": "name",
+        "nb_inhabitants": "population"
+    }, inplace=True)
+    city_data_df.drop_duplicates(inplace = True)
+
+    city_data_df["created_date"] = date.today()
+    print(city_data_df)
+    
+    con.execute("INSERT OR REPLACE INTO CONSOLIDATE_CITY SELECT * FROM city_data_df;")
+```
+
+Pour les deux autres foncitons qui gèrent respectivement les tables consolidate_station et consolidate_station_statement, j'ai utilisé séparément les données de Paris et Nantes pour remplir les tables.
+
+```python
+def consolidate_station_data():
+
+    con = duckdb.connect(database = "data/duckdb/mobility_analysis.duckdb", read_only = False)
+    data_paris = {}
+    data_nantes = {}
+
+    # === PARIS === 
+    with open(f"data/raw_data/{today_date}/paris_realtime_bicycle_data.json") as fd:
+        data_paris = json.load(fd)
+
+    raw_data_paris_df = pd.json_normalize(data_paris)
+    raw_data_paris_df['id'] = raw_data_paris_df['stationcode'] + '_' + raw_data_paris_df['code_insee_commune']
+    raw_data_paris_df["address"] = None
+    raw_data_paris_df["created_date"] = None
+
+    station_data_df = raw_data_paris_df[[
+        "id",
+        "stationcode",
+        "name",
+        "nom_arrondissement_communes",
+        "code_insee_commune",
+        "address",
+        "coordonnees_geo.lon",
+        "coordonnees_geo.lat",
+        "is_installed",
+        "created_date",
+        "capacity"
+    ]]
+    station_data_df.rename(columns={
+        "id": "id",
+        "stationcode": "code",
+        "nom_arrondissement_communes": "city_name",
+        "code_insee_commune": "city_code",
+        "coordonnees_geo.lon": "longitude",
+        "coordonnees_geo.lat": "latitude",
+        "is_installed": "status"
+    }, inplace=True)
+    station_data_df.drop_duplicates(inplace = True)
+
+    station_data_df["created_date"] = date.today()
+    print(station_data_df)
+    
+    con.execute("INSERT OR REPLACE INTO CONSOLIDATE_STATION SELECT * FROM station_data_df;")
+
+    # === NANTES ===
+    with open(f"data/raw_data/{today_date}/nantes_realtime_bicycle_data.json") as fd:
+        data_nantes = json.load(fd)
+
+    raw_data_nantes_df = pd.json_normalize(data_nantes)
+    raw_data_nantes_df["code_insee_commune"] = "44109"
+    raw_data_nantes_df['id'] = raw_data_nantes_df['number'].astype(str) + '_' + raw_data_nantes_df['code_insee_commune']
+    raw_data_nantes_df["created_date"] = None
+    raw_data_nantes_df["status_bool"] = raw_data_nantes_df["status"].map({"OPEN": "OUI", "CLOSED": "NON"})
+
+    station_data_df = raw_data_nantes_df[[
+        "id",
+        "number",
+        "name",
+        "contract_name",
+        "code_insee_commune",
+        "address",
+        "position.lon",
+        "position.lat",
+        "status_bool",
+        "created_date",
+        "bike_stands"
+    ]]
+    station_data_df.rename(columns={
+        "id": "id",
+        "number": "code",
+        "contract_name": "city_name",
+        "code_insee_commune": "city_code",
+        "position.lon": "longitude",
+        "position.lat": "latitude",
+        "status_bool": "status",
+        "bike_stands": "capacity"
+    }, inplace=True)
+    station_data_df.drop_duplicates(inplace = True)
+
+    station_data_df["created_date"] = date.today()
+    print(station_data_df)
+    
+    con.execute("INSERT OR REPLACE INTO CONSOLIDATE_STATION SELECT * FROM station_data_df;")
+
+def consolidate_station_statement_data():
+
+    con = duckdb.connect(database = "data/duckdb/mobility_analysis.duckdb", read_only = False)
+    data_paris = {}
+    data_nantes = {}
+
+    # === PARIS ===
+    with open(f"data/raw_data/{today_date}/paris_realtime_bicycle_data.json") as fd:
+        data_paris = json.load(fd)
+
+    raw_data_paris_df = pd.json_normalize(data_paris)
+    raw_data_paris_df['station_id'] = raw_data_paris_df['stationcode'] + '_' + raw_data_paris_df['code_insee_commune']
+    raw_data_paris_df["address"] = None
+
+    station_statement_data_df = raw_data_paris_df[[
+        "station_id",
+        "numdocksavailable",
+        "numbikesavailable",
+        "duedate"
+    ]]
+    station_statement_data_df.rename(columns={
+        "station_id": "station_id",
+        "numdocksavailable": "bicycle_docks_available",
+        "numbikesavailable": "bicycle_available",
+        "duedate": "last_statement_date"
+    }, inplace=True)
+    station_statement_data_df.drop_duplicates(inplace = True)
+
+    station_statement_data_df["created_date"] = date.today()
+    print(station_statement_data_df)
+    
+    con.execute("INSERT OR REPLACE INTO CONSOLIDATE_STATION_STATEMENT SELECT * FROM station_statement_data_df;")
+
+    # === NANTES ===
+    with open(f"data/raw_data/{today_date}/nantes_realtime_bicycle_data.json") as fd:
+        data_nantes = json.load(fd)
+
+    raw_data_nantes_df = pd.json_normalize(data_nantes)
+    raw_data_nantes_df["code_insee_commune"] = "44109"
+    raw_data_nantes_df['station_id'] = raw_data_nantes_df['number'].astype(str) + '_' + raw_data_nantes_df['code_insee_commune']
+
+    station_statement_data_df = raw_data_nantes_df[[
+        "station_id",
+        "available_bike_stands",
+        "available_bikes",
+        "last_update"
+    ]]
+    station_statement_data_df.rename(columns={
+        "station_id": "station_id",
+        "available_bike_stands": "bicycle_docks_available",
+        "available_bikes": "bicycle_available",
+        "last_update": "last_statement_date"
+    }, inplace=True)
+    station_statement_data_df.drop_duplicates(inplace = True)
+
+    station_statement_data_df["created_date"] = date.today()
+    print(station_statement_data_df)
+    
+    con.execute("INSERT OR REPLACE INTO CONSOLIDATE_STATION_STATEMENT SELECT * FROM station_statement_data_df;")
+```
+
 ### Agrégation des données
 
 Dans le fichier `data_agregation.py` on trouve une fonction qui permet de créer les tables dans une base de données **duckdb**. On utilise le fichier `create_agregate_tables.sql` pour définir les schémas des tables. Ces tables représentent une modélisation dimensionnelle simple :
@@ -141,7 +339,58 @@ def agregate_dim_city():
     con.execute(sql_statement)
 ```
 
+L'autre table de dimension fonctionne de la même manière :
+
+```python
+def agregate_dim_station():
+    con = duckdb.connect(database = "data/duckdb/mobility_analysis.duckdb", read_only = False)
+    
+    sql_statement = """
+    INSERT OR REPLACE INTO DIM_STATION
+    SELECT 
+        ID,
+        CODE,
+        NAME,
+        ADDRESS, 
+        LONGITUDE,
+        LATITUDE,
+        STATUS,
+        CAPACITY
+    FROM CONSOLIDATE_STATION
+    WHERE CREATED_DATE = (SELECT MAX(CREATED_DATE) FROM CONSOLIDATE_STATION);
+    """
+
+    con.execute(sql_statement)
+```
+
 La fonction pour la table `fact_station_statement` sera plus complexe: elle devra gérer les jointures avec les autres tables pour que les données soient analysables avec les données descriptives des tables de dimensions.
+
+```python
+def agregate_fact_station_statement():
+    con = duckdb.connect(database = "data/duckdb/mobility_analysis.duckdb", read_only = False)
+    
+    sql_statement = """
+        INSERT OR REPLACE INTO FACT_STATION_STATEMENT
+        SELECT 
+            sst.STATION_ID,
+            c.ID AS CITY_ID,
+            sst.BICYCLE_DOCKS_AVAILABLE,
+            sst.BICYCLE_AVAILABLE,
+            sst.LAST_STATEMENT_DATE,
+            sst.CREATED_DATE
+        FROM CONSOLIDATE_STATION_STATEMENT sst
+        JOIN CONSOLIDATE_STATION s ON sst.STATION_ID = s.ID
+        JOIN CONSOLIDATE_CITY c ON s.CITY_CODE = c.ID
+        WHERE sst.CREATED_DATE = (
+            SELECT MAX(CREATED_DATE) 
+            FROM CONSOLIDATE_STATION_STATEMENT
+        );
+    """
+
+    con.execute(sql_statement)
+```
+
+**EXPLICATION**
 
 ### Le fichier main.py
 
@@ -162,7 +411,7 @@ Cependant, ce pipeline ETL permet in fine de réaliser des analyses simples des 
 Pour faire fonctionner ce sujet, c'est assez simple:
 
 ```bash 
-git clone https://github.com/kevinl75/polytech-de-101-2025-tp-subject.git
+git clone https://github.com/eleabrki/polytech-de-101-2025-tp-subject
 
 cd polytech-de-101-2025-tp-subject
 
